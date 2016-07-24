@@ -1,0 +1,89 @@
+<html>
+	<head>
+	    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+		<link rel="stylesheet" type="text/css" href="{{url_for('static', filename = 'stylesheet.css')}}">
+	</head>
+
+<h1> {{Name}} </h1>
+<br>
+<img src = "{{url_for('static', filename = 'Photos/')}}{{PhotoSrc}}", alt="Asho">
+
+<h2> Спал </h2>
+{{Sleeps | safe}}
+<br>
+<input type="date" name="startDate" id="startDate">
+<input type="date" name="endDate" id="endDate">
+<button type="button" id="addSleep" onclick="addSleep()">Add Sleep</button>
+
+<h2> Бири </h2>
+{{Beers | safe}}
+<br>
+<input type="text" placeholder ="No Beers" name = "no_beers"></input>
+<button type="button" onclick="addBeer()" >Add Beers</button>
+
+
+
+
+<h2> Платил </h2>
+
+{{Payments | safe}}
+<br>
+<input type="text" placeholder ="Amount" name = "payment_amount"></input>
+<select name="pmntType" id = "pmntType">
+		  <option value="Beer"> Beer </option>
+		  <option value="Sleep">Sleep </option>
+		  <option value="Other">Other </option>
+		</select>
+<br>
+<input type="text" placeholder ="Comment" name = "payment_comment"></input>
+<button type="button" onclick="addPayment()" >Add Payment</button>
+
+
+<script type="text/javascript">
+		function addSleep() {
+			var startDate = $('input[name="startDate"]').val();
+			var endDate = $('input[name="endDate"]').val();
+			$.ajax({
+				type: 'POST',
+				url: 'http://{{appUrl}}/addsleep',
+				data: {'u_id': {{u_id}}, 'start_date' : startDate, 'end_date' : endDate},
+				crossDomain : true,
+				success: function( data ) {
+					window.location.reload(true);
+					alert(data);
+				}
+			});
+		}
+		
+		function addBeer() {
+				var no_beers = $('input[name="no_beers"]').val();
+				$.ajax({
+					type: 'POST',
+					url: 'http://{{appUrl}}/addbeer',
+					data: {'u_id': {{u_id}}, 'no_beers' : no_beers},
+					crossDomain : true,
+					success: function( data ) {
+						window.location.reload(true);
+						alert(data);
+					}
+				});
+			}
+			
+			function addPayment() {
+				var amount = $('input[name="payment_amount"]').val();
+				var type = $('#pmntType').val();
+				var comment = $('input[name="payment_comment"]').val()
+				$.ajax({
+					type: 'POST',
+					url: 'http://{{appUrl}}/addpayment',
+					data: {'u_id': {{u_id}}, 'amount' : amount, 'type' : type, 'comment' : comment},
+					crossDomain : true,
+					success: function( data ) {
+						window.location.reload(true);
+						alert(data);
+					}
+				});
+			}
+	</script>
+</html>

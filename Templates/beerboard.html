@@ -1,0 +1,55 @@
+<html>
+	<head>
+	    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+		<link rel="stylesheet" type="text/css" href="{{url_for('static', filename = 'stylesheet.css')}}">
+	</head>
+
+<h1> Beer Leaderboard </h1>
+<br>
+<script type="text/javascript", src="http://listjs.com/no-cdn/list.js"></script>
+	<div id="users">
+	<input class="search" placeholder="Search" />
+
+{{Board | safe}}
+
+</div>
+
+<input type="text" placeholder ="Name" name = "user_name"></input>
+<button type="button" onclick="addUser()" >Add User</button>
+
+<script type="text/javascript">
+		var options = {
+			  valueNames: [ 'name' ]
+			};
+
+			var userList = new List('users', options);
+			
+		function addBeer(u_id) {
+				$.ajax({
+					type: 'POST',
+					url: 'http://{{appUrl}}/addbeer',
+					data: {'u_id': u_id, 'no_beers' : 1},
+					crossDomain : true,
+					success: function( data ) {
+						window.location.reload(true);
+						alert(data);
+					}
+				});
+			}
+			
+		function addUser() {
+				var name = $('input[name="user_name"]').val();
+				$.ajax({
+					type: 'POST',
+					url: 'http://{{appUrl}}/adduser',
+					data: {'name': name, photo_path : ''},
+					crossDomain : true,
+					success: function( data ) {
+						window.location.reload(true);
+						alert(data);
+					}
+				});
+			}
+	</script>
+</html>

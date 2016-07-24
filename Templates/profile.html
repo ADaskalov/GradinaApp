@@ -1,0 +1,28 @@
+<html>
+	<head>
+	    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+		<link rel="stylesheet" type="text/css" href="{{url_for('static', filename = 'stylesheet.css')}}">
+	</head>
+
+<h1> {{Name}} </h1>
+<br>
+<img src = "{{url_for('static', filename = 'Photos/')}}{{PhotoSrc}}", alt="Asho">
+
+<h2> Спал </h2>
+{{Sleeps | safe}}
+<br>
+
+<h2> Бири </h2>
+{{Beers | safe}}
+<br>
+
+<h2> Платил </h2>
+
+{{Payments | safe}}
+<br>
+
+
+<a href = "http://{{appUrl}}/masterprofile/{{u_id}}"> Accounting </a>
+
+</html>
