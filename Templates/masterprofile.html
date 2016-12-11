@@ -7,7 +7,7 @@
 
 <h1> {{Name}} </h1>
 <br>
-<img src = "{{url_for('static', filename = 'Photos/')}}{{PhotoSrc}}", alt="Asho">
+<img src = "{{url_for('static', filename = 'Photos/')}}{{PhotoSrc}}" alt="{{Name}}"  width="200">
 
 <h2> Спал </h2>
 {{Sleeps | safe}}

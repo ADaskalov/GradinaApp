@@ -1,13 +1,17 @@
 from flask import make_response, request, current_app, Flask, render_template, jsonify, Response
+from functools import wraps
 import pandas
-from datetime import datetime
+from datetime import datetime, timedelta
 import pyodbc
 import yaml
+import pytz
 
 # DB Dump + edit
-# sleep overview
+# DB installation file
+# cash payments table
 # user id
 # Appearance
+# beer between dates
 
 with open('C:/Gradina App/config.yaml', 'r') as f:
 	config = yaml.load(f)
@@ -44,7 +48,7 @@ def get_users(u_id = None):
 def set_beer(u_id, no_beers, entry_user, batch_id = None):
 	dbCon = pyodbc.connect(dbString)
 	dbCrsr = dbCon.cursor()
-	entry_time = datetime.now()
+	entry_time = datetime.now(pytz.timezone('Europe/Sofia'))
 	uploadQuery = """INSERT INTO dbo.beers (u_id, no_beers, entry_time, entry_user, batch_id)
 						VALUES (?,?,?,?,?)"""
 	
@@ -73,7 +77,7 @@ def get_beers(u_id = None):
 def set_sleep(u_id, start_date, end_date, entry_user, tent_id = None):
 	dbCon = pyodbc.connect(dbString)
 	dbCrsr = dbCon.cursor()
-	entry_time = datetime.now()
+	entry_time = datetime.now(pytz.timezone('Europe/Sofia'))
 	uploadQuery = """INSERT INTO dbo.sleeps (u_id, start_date, end_date, entry_time, entry_user, tent_id)
 						VALUES (?,?,?,?,?,?)"""
 	
@@ -93,7 +97,6 @@ def get_sleeps(u_id = None):
 	dbCon = pyodbc.connect(dbString)
 	sleepQuery = """SELECT * FROM dbo.sleeps"""
 	sleeps = pandas.read_sql(sleepQuery, dbCon,parse_dates = ['entry_time', 'start_date', 'end_date'])
-	print sleeps
 	if len(sleeps)>0:
 		sleeps['Nights'] = sleeps['end_date'] - sleeps['start_date']
 	if u_id is None:
@@ -105,11 +108,10 @@ def set_payment(u_id, amount, pmnt_type_id, entry_user, comment = None):
 	
 	dbCon = pyodbc.connect(dbString)
 	dbCrsr = dbCon.cursor()
-	entry_time = datetime.now()
+	entry_time = datetime.now(pytz.timezone('Europe/Sofia'))
 	uploadQuery = """INSERT INTO dbo.payments (u_id, amount, pmnt_type_id, comment, entry_time, entry_user)
 						VALUES (?,?,?,?,?,?)"""
 	
-	print uploadQuery
 	try:
 		dbCrsr.execute(uploadQuery, (u_id, amount, pmnt_type_id, comment, entry_time, entry_user))
 		dbCrsr.commit()
@@ -134,6 +136,12 @@ def get_payments(u_id = None):
 	else:
 		return payments.loc[payments.u_id == u_id]
 		
+def get_cash_payments():
+	dbCon = pyodbc.connect(dbString)
+	pmntQuery = """SELECT * FROM dbo.cash_payments """
+	cash_payments = pandas.read_sql(pmntQuery, dbCon)
+	return cash_payments
+		
 def get_payment_type_id(payment_type = None):
 	dbCon = pyodbc.connect(dbString)
 	pmntQuery = """SELECT * FROM dbo.payment_types """
@@ -146,8 +154,21 @@ def get_payment_type_id(payment_type = None):
 		else:
 			return 'No such payment type'
 
+def stackScreen(screen, colList):
+    stackedScreen = screen.copy()
+    tmp = screen.copy()
+    for x in colList:
+        tmp2 = stackedScreen.copy()
+        tmp2['Item'] = x
+        tmp2['Value'] = stackedScreen[x]
+        tmp = pandas.concat([tmp2,tmp],axis = 0)
+        tmp.drop(x, axis = 1, inplace = True)
 
-from functools import wraps
+    return tmp[tmp['Item'].fillna(0)!=0]	
+
+def daterange(start_date, end_date):
+    for n in range(int ((end_date - start_date).days)):
+        yield start_date + timedelta(n)
 
 def check_auth(u, p):
     """This function is called to check if a username /
@@ -171,8 +192,8 @@ def requires_auth(f):
         return f(*args, **kwargs)
     return decorated
 			
-			
-app = Flask(__name__)
+app = Flask(__name__)			
+
 @app.route("/home")
 def home():
 	return """
@@ -193,10 +214,13 @@ def home():
 		<div align="center">
 			<a href="http://karavana.party/beerboard"> Beer Leaderboard </a>
 			<a href="http://karavana.party/beeranalytics"> Beer Analytics </a>
+			<a href="http://karavana.party/debtoverview"> Debt Overview </a>
+			<a href="http://karavana.party/sleepoverview"> Sleep Overview</a>
+			<a href="%s"> Notes </a>
 						
 		</div>
 	<br>
-	"""
+	"""%config['notesURL']
 	
 @app.route("/beeranalytics")
 def beeranalytics():
@@ -207,11 +231,54 @@ def beeranalytics():
 	board = pandas.merge( left = beers, right = users, left_on = 'u_id', 
 						right_index = True, how = 'outer')
 	return render_template('pivottablejs.html', pyOutput = board.to_csv(), pctThreshold=0,
-								rows = '"name"', cols = '"Date"', rendName = 'Line Chart',
+								rows = '"name"', cols = '"Date"', rendName = 'Table',
 								aggName = 'Sum', aggVal = 'no_beers')
+								
+@app.route("/debtoverview")
+def debtoverview():
+	beers = get_beers().groupby('u_id').sum()
+	users = get_users()
+	sleeps = get_sleeps()
+	cash_payments = get_cash_payments()
+	sleeps['Nights'] = sleeps['Nights'].map(lambda t: t.days)
+	sleeps['Nights_owed'] = sleeps['Nights']*sleeps['tent_id'].map(lambda t: 15 if pandas.isnull(t) else 5)*(sleeps['end_date']<datetime(2016,9,1))
+	sleeps = sleeps.groupby('u_id').sum()
+	payments = get_payments().groupby('u_id').sum()
+	#TODO pivot payments
+	debts = pandas.merge( left = users, right = beers, left_index = True, right_index = True, how = 'outer')
+	debts = pandas.merge( left = debts, right = sleeps, left_index = True, right_index = True, how = 'outer')
+	debts = pandas.merge( left = debts, right = payments, left_index = True, right_index = True, how = 'outer')
+	debts['outstanding'] = debts['amount'].fillna(0) - debts['Nights_owed'].fillna(0) - debts['no_beers'].fillna(0)
+	debts['Type'] = 'People'
+	
+	cash_payments.rename(columns = {'description' : 'name'}, inplace = True)
+	cash_payments['Type'] = 'Other'
+	debts = pandas.concat([debts, cash_payments], axis = 0)
+	debts['amount'] = -debts['amount']
+	stackedDebt = stackScreen(debts, [ 'no_beers', 'Nights_owed', 'amount'] )
+	return render_template('pivottablejs.html', pyOutput = stackedDebt.loc[:,['Type', 'outstanding', 'name', 'Item', 'Value']].to_csv(), 
+								pctThreshold=0,	rows = '["name", "Type"]', cols = '"Item"', rendName = 'Table',
+								aggName = 'Sum', aggVal = 'Value')
 
+@app.route("/sleepoverview")
+def sleepoverview():
+	users = get_users()
+	sleeps = get_sleeps()
+	sleeps = pandas.merge(left = sleeps, right = users, left_on = 'u_id', right_index = True, how = 'left').set_index('s_id')
+	sleepOverview = pandas.DataFrame(columns = ['Name', 'date','tent_id'])
+	i = 0
+	for r in sleeps.index:
+		for d in daterange(sleeps.ix[r,'start_date'], sleeps.ix[r,'end_date']):
+			sleepOverview.loc[i] = [sleeps.ix[r,'name'],d.date(),sleeps.ix[r, 'tent_id']]
+			i +=1
+			
+	return render_template('pivottablejs.html', pyOutput = sleepOverview.to_csv(), pctThreshold=0,
+								rows = '"tent_id"', cols = '"date"', rendName = 'Table',
+								aggName = 'Count', aggVal = 'Value')
+								
 
 @app.route("/beerboard")
+@app.route("/")
 def beerboard():
 	beers = get_beers()
 	users = get_users()
@@ -225,21 +292,30 @@ def beerboard():
 		  <thead>
 			<tr style="text-align: right;">
 			  <th></th>
+			  <th>Name</th>
 			  <th>Beers</th>
 			  <th>Add</th>
 			</tr>
 		  </thead>
 		  <tbody class = "list">"""
 	for u in board.index:
+		if board.ix[u,'photo_path'] == 0:
+			PhotoSrc = 'nophoto.jpg'
+		else:
+			PhotoSrc = board.ix[u, 'photo_path']
 		beerTable = beerTable + """
 		<tr>
+		  <td><img src = "/static/Photos/{PhotoSrc}" alt="{name}"  width="100"></td>
 		  <th><a href="http://{appUrl}/profile/{u_id}" class = "name">{name}</a></th>
 		  <td>{no_beers}</td>
-		  <td><button type="button" onclick="addBeer({u_id})" >+1</button></td>
-		</tr>""".format(u_id = u, name = board.ix[u,'name'], no_beers = board.ix[u, 'no_beers'], appUrl = appUrl)
+		  <td><button type="button" onclick="addBeer({u_id})" style="height:40px;width:40px" >+1</button></td>
+		  
+		</tr>""".format(u_id = u, name = board.ix[u,'name'], no_beers = board.ix[u, 'no_beers'], appUrl = appUrl, PhotoSrc = PhotoSrc)
 	beerTable = beerTable + "</tbody></table>"
 	return render_template('beerboard.html', Board = beerTable, appUrl = appUrl)
 
+	
+	
 @app.route("/addsleep", methods = ['POST','GET', 'OPTIONS'])
 @requires_auth
 def addSleep():
@@ -285,7 +361,8 @@ def generate_profile(user, template):
 	
 	userBeers = get_beers(u_id)
 	userBeers['Date'] = userBeers['entry_time'].map(lambda t: t.date())
-	userBeers = userBeers.groupby('Date').sum().loc[:, ['no_beers']]
+	userBeers['batch_id'] = userBeers['batch_id'].fillna('Burgasko')
+	userBeers = userBeers.groupby(['Date', 'batch_id']).sum().loc[:, ['no_beers']]
 	
 	
 	payments = get_payments(u_id)
@@ -309,9 +386,16 @@ def profile(user):
 def masterprofile(user):
 	return generate_profile(user, 'masterprofile.html')
 
+mode = config['mode']
+if mode == 'Prod':
+	appUrl = 'karavana.party'
+else:
+	appUrl = 'localhost:5000'
+
 if __name__ == "__main__":
     # here is starting of the development HTTP server
-	mode = config['mode']
+
+	
 	if mode == 'Prod':
 		appUrl = 'karavana.party'
 		app.run(debug = False, host = '0.0.0.0', port = 80)
